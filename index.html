@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Caçador de Estrelas</title>
+  <style>
+    body{margin:0;background:black;color:white;font-family:sans-serif;overflow:hidden;}
+    #game{display:block;margin:0 auto;background:radial-gradient(circle at center,#000010,#000000);}
+    .hud{position:fixed;left:12px;top:12px;font-weight:700;background:rgba(0,0,0,0.4);padding:8px 12px;border-radius:10px}
+    .hud.right{left:auto;right:12px}
+    .controls-mobile{position:fixed;left:12px;bottom:12px;right:12px;display:flex;justify-content:space-between;gap:8px}
+    .btn{background:rgba(255,255,255,0.1);border-radius:10px;padding:14px 16px;font-weight:700;backdrop-filter:blur(4px);user-select:none;cursor:pointer;color:white}
+    @media(min-width:900px){ .controls-mobile{display:none} }
+  </style>
+</head>
+<body>
+  <canvas id="game" width="600" height="800"></canvas>
+  <div class="hud" id="score">Pontos: 0</div>
+  <div class="hud right" id="lives">Vidas: 3</div>
+  
+  <!-- Mobile controls -->
+  <div class="controls-mobile" id="mobileControls">
+    <div class="btn" id="leftBtn">◀</div>
+    <div class="btn" id="shootBtn">▲</div>
+    <div class="btn" id="rightBtn">▶</div>
+  </div>
+
+  <!-- 🎼 Sons -->
+  <audio id="bgMusic" src="https://cdn.pixabay.com/download/audio/2022/08/26/audio_73009f24eb.mp3?filename=calm-piano-ambient-118199.mp3" loop></audio>
+  <audio id="starSound" src="https://cdn.pixabay.com/download/audio/2021/08/04/audio_29d06fb0d7.mp3?filename=collectcoin-6075.mp3"></audio>
+  <audio id="hitSound" src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_b356d25e6e.mp3?filename=hit-21834.mp3"></audio>
+
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+let W = canvas.width, H = canvas.height;
+
+// Estado do jogo
+let score = 0;
+let lives = 3;
+let stars = [];
+let asteroids = [];
+let bullets = [];
+
+const player = {x:W/2,y:H-60,w:40,h:40,speed:6,dx:0};
+
+// Sons
+const bgMusic = document.getElementById("bgMusic");
+const starSound = document.getElementById("starSound");
+const hitSound = document.getElementById("hitSound");
+
+// Tocar música de fundo quando começar
+window.addEventListener("click", ()=>{ 
+  if(bgMusic.paused){ bgMusic.volume=0.4; bgMusic.play(); } 
+}, {once:true});
+
+function drawPlayer(){
+  ctx.fillStyle = 'cyan';
+  ctx.beginPath();
+  ctx.moveTo(player.x,player.y);
+  ctx.lineTo(player.x-20,player.y+40);
+  ctx.lineTo(player.x+20,player.y+40);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function spawnStar(){
+  stars.push({x:Math.random()*W,y:-20,r:8});
+}
+
+function spawnAsteroid(){
+  asteroids.push({x:Math.random()*W,y:-40,r:20+Math.random()*20,dy:2+score/20});
+}
+
+function drawStars(){
+  ctx.fillStyle = 'yellow';
+  stars.forEach(s=>{
+    ctx.beginPath();
+    ctx.arc(s.x,s.y,s.r,0,Math.PI*2);
+    ctx.fill();
+  });
+}
+
+function drawAsteroids(){
+  ctx.fillStyle = 'brown';
+  asteroids.forEach(a=>{
+    ctx.beginPath();
+    ctx.arc(a.x,a.y,a.r,0,Math.PI*2);
+    ctx.fill();
+  });
+}
+
+function drawBullets(){
+  ctx.fillStyle = 'lime';
+  bullets.forEach(b=>{
+    ctx.fillRect(b.x-2,b.y-10,4,10);
+  });
+}
+
+function update(){
+  ctx.clearRect(0,0,W,H);
+  drawPlayer();
+  drawStars();
+  drawAsteroids();
+  drawBullets();
+
+  // mover
+  player.x += player.dx;
+  if(player.x<20) player.x=20;
+  if(player.x>W-20) player.x=W-20;
+
+  stars.forEach(s=>s.y+=2);
+  asteroids.forEach(a=>a.y+=a.dy);
+  bullets.forEach(b=>b.y-=8);
+
+  // colisões estrela
+  stars = stars.filter(s=>{
+    if(Math.hypot(player.x-s.x,player.y-s.y)<30){
+      score++;
+      starSound.currentTime=0; starSound.play();
+      document.getElementById('score').textContent = "Pontos: "+score;
+      return false;
+    }
+    return s.y<H+20;
+  });
+
+  // colisões asteroide
+  asteroids = asteroids.filter(a=>{
+    if(Math.hypot(player.x-a.x,player.y-a.y)<a.r+20){
+      lives--;
+      hitSound.currentTime=0; hitSound.play();
+      document.getElementById('lives').textContent = "Vidas: "+lives;
+      if(lives<=0){alert("Fim de jogo! Pontos: "+score);document.location.reload();}
+      return false;
+    }
+    return a.y<H+40;
+  });
+
+  // colisões bala-asteroide
+  bullets = bullets.filter(b=>{
+    let hit=false;
+    asteroids = asteroids.filter(a=>{
+      if(Math.hypot(b.x-a.x,b.y-a.y)<a.r){
+        hit=true; 
+        hitSound.currentTime=0; hitSound.play();
+        return false;
+      }
+      return true;
+    });
+    return !hit && b.y>-10;
+  });
+
+  requestAnimationFrame(update);
+}
+
+// controles teclado
+window.addEventListener('keydown',e=>{
+  if(e.key==='ArrowLeft'||e.key==='a') player.dx=-player.speed;
+  if(e.key==='ArrowRight'||e.key==='d') player.dx=player.speed;
+  if(e.key===' '){ bullets.push({x:player.x,y:player.y}); }
+});
+window.addEventListener('keyup',e=>{
+  if(e.key==='ArrowLeft'||e.key==='a'||e.key==='ArrowRight'||e.key==='d') player.dx=0;
+});
+
+// mobile
+const leftBtn=document.getElementById('leftBtn');
+const rightBtn=document.getElementById('rightBtn');
+const shootBtn=document.getElementById('shootBtn');
+leftBtn.ontouchstart=()=>player.dx=-player.speed;
+leftBtn.ontouchend=()=>player.dx=0;
+rightBtn.ontouchstart=()=>player.dx=player.speed;
+rightBtn.ontouchend=()=>player.dx=0;
+shootBtn.ontouchstart=()=>{bullets.push({x:player.x,y:player.y});};
+
+// spawn
+setInterval(spawnStar,2000);
+setInterval(spawnAsteroid,1500);
+
+update();
+</script>
+</body>
+</html>
