@@ -1,184 +1,403 @@
 <!doctype html>
 <html lang="pt-BR">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Caçador de Estrelas</title>
-  <style>
-    body{margin:0;background:black;color:white;font-family:sans-serif;overflow:hidden;}
-    #game{display:block;margin:0 auto;background:radial-gradient(circle at center,#000010,#000000);}
-    .hud{position:fixed;left:12px;top:12px;font-weight:700;background:rgba(0,0,0,0.4);padding:8px 12px;border-radius:10px}
-    .hud.right{left:auto;right:12px}
-    .controls-mobile{position:fixed;left:12px;bottom:12px;right:12px;display:flex;justify-content:space-between;gap:8px}
-    .btn{background:rgba(255,255,255,0.1);border-radius:10px;padding:14px 16px;font-weight:700;backdrop-filter:blur(4px);user-select:none;cursor:pointer;color:white}
-    @media(min-width:900px){ .controls-mobile{display:none} }
-  </style>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no"/>
+<title>Dan — Protótipo (placeholder)</title>
+<style>
+  :root{--ui-bg: rgba(0,0,0,0.35)}
+  body{margin:0;background:#0b2a10;font-family:Arial,Helvetica,sans-serif;color:#fff;overflow:hidden}
+  canvas{display:block;margin:0 auto;background:linear-gradient(#0b3d1f,#072312);touch-action:none}
+  .hud{position:fixed;left:12px;top:12px;background:var(--ui-bg);padding:8px 12px;border-radius:10px;font-weight:700}
+  .hud.right{left:auto;right:12px}
+  .name{position:fixed;left:50%;top:12px;transform:translateX(-50%);background:var(--ui-bg);padding:8px 12px;border-radius:10px;font-weight:800}
+  #joypad{position:fixed;left:18px;bottom:18px;width:140px;height:140px;border-radius:50%;background:rgba(255,255,255,0.06);backdrop-filter:blur(6px);touch-action:none;display:flex;align-items:center;justify-content:center}
+  #stick{width:56px;height:56px;border-radius:50%;background:rgba(255,255,255,0.12);transform:translate(0,0);touch-action:none}
+  #attackBtn{position:fixed;right:18px;bottom:30px;width:84px;height:84px;border-radius:50%;background:linear-gradient(180deg,#ff6b6b,#c94a4a);display:flex;align-items:center;justify-content:center;font-weight:900;font-size:24px;box-shadow:0 8px 20px rgba(0,0,0,0.6)}
+  #attackBtn:active{transform:scale(0.96)}
+  @media(min-width:900px){#joypad{display:none} #attackBtn{display:none}}
+  .hint{position:fixed;left:12px;bottom:12px;background:var(--ui-bg);padding:8px 10px;border-radius:8px;font-size:13px}
+</style>
 </head>
 <body>
-  <canvas id="game" width="600" height="800"></canvas>
-  <div class="hud" id="score">Pontos: 0</div>
-  <div class="hud right" id="lives">Vidas: 3</div>
-  
-  <!-- Mobile controls -->
-  <div class="controls-mobile" id="mobileControls">
-    <div class="btn" id="leftBtn">◀</div>
-    <div class="btn" id="shootBtn">▲</div>
-    <div class="btn" id="rightBtn">▶</div>
-  </div>
 
-  <!-- 🎼 Sons -->
-  <audio id="bgMusic" src="https://cdn.pixabay.com/download/audio/2022/08/26/audio_73009f24eb.mp3?filename=calm-piano-ambient-118199.mp3" loop></audio>
-  <audio id="starSound" src="https://cdn.pixabay.com/download/audio/2021/08/04/audio_29d06fb0d7.mp3?filename=collectcoin-6075.mp3"></audio>
-  <audio id="hitSound" src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_b356d25e6e.mp3?filename=hit-21834.mp3"></audio>
+<canvas id="game" width="720" height="720"></canvas>
+
+<div class="name" id="playerName">Dan</div>
+<div class="hud" id="hp">HP: 100</div>
+<div class="hud right" id="score">Pontuação: 0</div>
+
+<!-- Mobile joystick -->
+<div id="joypad" aria-hidden="true">
+  <div id="stick"></div>
+</div>
+<!-- Attack button (mobile) -->
+<div id="attackBtn" aria-hidden="true">⚔</div>
+
+<div class="hint">PC: WASD / ←↑→↓ + Espaço = atacar • Mobile: arraste joystick & toque ⚔</div>
+
+<!-- Audio -->
+<audio id="bgMusic" src="https://cdn.pixabay.com/download/audio/2022/08/26/audio_73009f24eb.mp3?filename=calm-piano-ambient-118199.mp3" loop></audio>
+<audio id="swingSfx" src="https://cdn.pixabay.com/download/audio/2021/10/29/audio_d5f10c9a45.mp3?filename=sword-slice-6291.mp3"></audio>
+<audio id="hitSfx" src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_b356d25e6e.mp3?filename=hit-21834.mp3"></audio>
+<audio id="monsterDieSfx" src="https://cdn.pixabay.com/download/audio/2021/09/08/audio_3b7b6e2b3a.mp3?filename=magic-chime-03-6831.mp3"></audio>
 
 <script>
+/* ---------------- Setup ---------------- */
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
-let W = canvas.width, H = canvas.height;
+const W = canvas.width, H = canvas.height;
 
-// Estado do jogo
+function fitCanvas(){
+  const scale = Math.min(window.innerWidth / W, window.innerHeight / H);
+  canvas.style.width = Math.round(W * scale) + 'px';
+  canvas.style.height = Math.round(H * scale) + 'px';
+}
+fitCanvas(); window.addEventListener('resize', fitCanvas);
+
+/* Audio */
+const bgMusic = document.getElementById('bgMusic');
+const swingSfx = document.getElementById('swingSfx');
+const hitSfx = document.getElementById('hitSfx');
+const monsterDieSfx = document.getElementById('monsterDieSfx');
+window.addEventListener('click', ()=>{ if(bgMusic.paused){ bgMusic.volume=0.35; bgMusic.play(); } }, {once:true});
+
+/* ---------------- Map ---------------- */
+const tileSize = 40;
+const cols = Math.floor(W / tileSize);
+const rows = Math.floor(H / tileSize);
+
+// generate map: 0 grass, 1 tree (collision)
+let map = new Array(rows);
+for(let r=0;r<rows;r++){
+  map[r] = new Array(cols).fill(0);
+}
+// plant trees randomly with clusters
+for(let i=0;i<300;i++){
+  const r = Math.floor(Math.random()*rows);
+  const c = Math.floor(Math.random()*cols);
+  map[r][c]=1;
+  if(Math.random()<0.6){
+    const r2 = Math.min(rows-1, Math.max(0, r + (Math.floor(Math.random()*3)-1)));
+    const c2 = Math.min(cols-1, Math.max(0, c + (Math.floor(Math.random()*3)-1)));
+    map[r2][c2]=1;
+  }
+}
+// clear start area
+const startR = Math.floor(rows/2);
+const startC = Math.floor(cols/2);
+for(let r = startR-2; r <= startR+2; r++){
+  for(let c = startC-2; c <= startC+2; c++){
+    if(r>=0 && c>=0 && r<rows && c<cols) map[r][c]=0;
+  }
+}
+
+/* ---------------- Player Dan (placeholder square) ---------------- */
+const player = {
+  name: 'Dan',
+  x: startC*tileSize + tileSize/2 - 18,
+  y: startR*tileSize + tileSize/2 - 18,
+  w: 36, h:36,
+  speed: 2.6,
+  hp: 100, maxHp: 100,
+  attackRange: 44, attackDamage: 34,
+  attackCooldown: 0, attackDelay: 28
+};
+
+/* NOTE:
+   To replace Dan placeholder by a pixel-art sprite later:
+   - create an Image() and load your sprite sheet,
+   - in drawPlayer() use ctx.drawImage(sprite, sx, sy, sw, sh, player.x, player.y, player.w, player.h)
+   - you can handle animations by changing sx depending on direction/state.
+*/
+
+/* ---------------- Monsters ---------------- */
+let monsters = [];
+function spawnMonster(x,y){
+  monsters.push({
+    x, y,
+    w:34, h:34,
+    hp: 60 + Math.floor(Math.random()*40),
+    speed: 0.9 + Math.random()*0.9,
+    state: 'patrol',
+    dirX: Math.random()>0.5?1:-1,
+    dirY: Math.random()>0.7? (Math.random()>0.5?1:-1) : 0,
+    aggroRange: 140,
+    patrolTimer: 80 + Math.floor(Math.random()*220)
+  });
+}
+// spawn monsters away from start
+for(let i=0;i<18;i++){
+  let tries=0;
+  while(tries<200){
+    const r = Math.floor(Math.random()*rows);
+    const c = Math.floor(Math.random()*cols);
+    if(map[r][c]===0){
+      const x = c*tileSize + 2 + Math.random()*(tileSize-36);
+      const y = r*tileSize + 2 + Math.random()*(tileSize-36);
+      if(Math.hypot(x-player.x, y-player.y) > 160){ spawnMonster(x,y); break; }
+    }
+    tries++;
+  }
+}
+
+/* ---------------- Input: keyboard + joystick ---------------- */
+const keys = {};
+window.addEventListener('keydown', e => { keys[e.key] = true; if(e.key === ' ') doAttack(); });
+window.addEventListener('keyup', e => { keys[e.key] = false; });
+
+const joypad = document.getElementById('joypad');
+const stick = document.getElementById('stick');
+let joyActive = false;
+let joyVector = {x:0,y:0};
+
+function getElementCenter(el){
+  const r = el.getBoundingClientRect();
+  return {x: r.left + r.width/2, y: r.top + r.height/2};
+}
+
+function onJoyStart(e){
+  e.preventDefault();
+  joyActive = true;
+  const t = e.touches ? e.touches[0] : e;
+  const center = getElementCenter(joypad);
+  updateStick(t.clientX, t.clientY, center);
+}
+function onJoyMove(e){
+  if(!joyActive) return;
+  const t = e.touches ? e.touches[0] : e;
+  const center = getElementCenter(joypad);
+  updateStick(t.clientX, t.clientY, center);
+}
+function onJoyEnd(e){
+  joyActive = false;
+  joyVector.x = 0; joyVector.y = 0;
+  stick.style.transform = `translate(0px,0px)`;
+}
+function updateStick(clientX, clientY, center){
+  const rect = joypad.getBoundingClientRect();
+  const localX = clientX - rect.left - rect.width/2;
+  const localY = clientY - rect.top - rect.height/2;
+  const max = rect.width/2 - 18;
+  const dist = Math.hypot(localX, localY);
+  const nx = dist>0 ? localX/dist : 0;
+  const ny = dist>0 ? localY/dist : 0;
+  const limited = dist>max ? max : dist;
+  const px = nx * limited, py = ny * limited;
+  stick.style.transform = `translate(${px}px, ${py}px)`;
+  joyVector.x = (dist>max ? nx : localX/max);
+  joyVector.y = (dist>max ? ny : localY/max);
+}
+joypad.addEventListener('touchstart', onJoyStart, {passive:false});
+joypad.addEventListener('touchmove', onJoyMove, {passive:false});
+joypad.addEventListener('touchend', onJoyEnd, {passive:false});
+joypad.addEventListener('mousedown', (e)=>{ onJoyStart(e); window.addEventListener('mousemove', onJoyMove); }, {passive:false});
+window.addEventListener('mouseup', (e)=>{ onJoyEnd(e); window.removeEventListener('mousemove', onJoyMove); }, {passive:false});
+
+const attackBtn = document.getElementById('attackBtn');
+attackBtn.addEventListener('touchstart', (e)=>{ e.preventDefault(); doAttack(); }, {passive:false});
+attackBtn.addEventListener('mousedown', ()=>doAttack());
+
+/* ---------------- Collision helpers ---------------- */
+function tileBlockedAt(x,y){
+  const c = Math.floor((x) / tileSize);
+  const r = Math.floor((y) / tileSize);
+  if(r<0||c<0||r>=rows||c>=cols) return true;
+  return map[r][c] === 1;
+}
+function moveWithCollision(entity, vx, vy){
+  if(vx !== 0){
+    const newX = entity.x + vx;
+    const corners = [
+      {x: newX, y: entity.y},
+      {x: newX + entity.w, y: entity.y},
+      {x: newX, y: entity.y + entity.h},
+      {x: newX + entity.w, y: entity.y + entity.h}
+    ];
+    let blocked = false;
+    for(const c of corners) if(tileBlockedAt(c.x, c.y)) { blocked = true; break; }
+    if(!blocked) entity.x = newX;
+  }
+  if(vy !== 0){
+    const newY = entity.y + vy;
+    const corners = [
+      {x: entity.x, y: newY},
+      {x: entity.x + entity.w, y: newY},
+      {x: entity.x, y: newY + entity.h},
+      {x: entity.x + entity.w, y: newY + entity.h}
+    ];
+    let blocked = false;
+    for(const c of corners) if(tileBlockedAt(c.x, c.y)) { blocked = true; break; }
+    if(!blocked) entity.y = newY;
+  }
+}
+
+/* ---------------- Combat ---------------- */
 let score = 0;
-let lives = 3;
-let stars = [];
-let asteroids = [];
-let bullets = [];
-
-const player = {x:W/2,y:H-60,w:40,h:40,speed:6,dx:0};
-
-// Sons
-const bgMusic = document.getElementById("bgMusic");
-const starSound = document.getElementById("starSound");
-const hitSound = document.getElementById("hitSound");
-
-// Tocar música de fundo quando começar
-window.addEventListener("click", ()=>{ 
-  if(bgMusic.paused){ bgMusic.volume=0.4; bgMusic.play(); } 
-}, {once:true});
-
-function drawPlayer(){
-  ctx.fillStyle = 'cyan';
-  ctx.beginPath();
-  ctx.moveTo(player.x,player.y);
-  ctx.lineTo(player.x-20,player.y+40);
-  ctx.lineTo(player.x+20,player.y+40);
-  ctx.closePath();
-  ctx.fill();
-}
-
-function spawnStar(){
-  stars.push({x:Math.random()*W,y:-20,r:8});
-}
-
-function spawnAsteroid(){
-  asteroids.push({x:Math.random()*W,y:-40,r:20+Math.random()*20,dy:2+score/20});
-}
-
-function drawStars(){
-  ctx.fillStyle = 'yellow';
-  stars.forEach(s=>{
-    ctx.beginPath();
-    ctx.arc(s.x,s.y,s.r,0,Math.PI*2);
-    ctx.fill();
-  });
-}
-
-function drawAsteroids(){
-  ctx.fillStyle = 'brown';
-  asteroids.forEach(a=>{
-    ctx.beginPath();
-    ctx.arc(a.x,a.y,a.r,0,Math.PI*2);
-    ctx.fill();
-  });
-}
-
-function drawBullets(){
-  ctx.fillStyle = 'lime';
-  bullets.forEach(b=>{
-    ctx.fillRect(b.x-2,b.y-10,4,10);
-  });
-}
-
-function update(){
-  ctx.clearRect(0,0,W,H);
-  drawPlayer();
-  drawStars();
-  drawAsteroids();
-  drawBullets();
-
-  // mover
-  player.x += player.dx;
-  if(player.x<20) player.x=20;
-  if(player.x>W-20) player.x=W-20;
-
-  stars.forEach(s=>s.y+=2);
-  asteroids.forEach(a=>a.y+=a.dy);
-  bullets.forEach(b=>b.y-=8);
-
-  // colisões estrela
-  stars = stars.filter(s=>{
-    if(Math.hypot(player.x-s.x,player.y-s.y)<30){
-      score++;
-      starSound.currentTime=0; starSound.play();
-      document.getElementById('score').textContent = "Pontos: "+score;
-      return false;
-    }
-    return s.y<H+20;
-  });
-
-  // colisões asteroide
-  asteroids = asteroids.filter(a=>{
-    if(Math.hypot(player.x-a.x,player.y-a.y)<a.r+20){
-      lives--;
-      hitSound.currentTime=0; hitSound.play();
-      document.getElementById('lives').textContent = "Vidas: "+lives;
-      if(lives<=0){alert("Fim de jogo! Pontos: "+score);document.location.reload();}
-      return false;
-    }
-    return a.y<H+40;
-  });
-
-  // colisões bala-asteroide
-  bullets = bullets.filter(b=>{
-    let hit=false;
-    asteroids = asteroids.filter(a=>{
-      if(Math.hypot(b.x-a.x,b.y-a.y)<a.r){
-        hit=true; 
-        hitSound.currentTime=0; hitSound.play();
-        return false;
+function doAttack(){
+  if(player.attackCooldown > 0) return;
+  player.attackCooldown = player.attackDelay;
+  swingSfx.currentTime = 0; swingSfx.volume = 0.9; swingSfx.play();
+  for(let i = monsters.length -1; i >= 0; i--){
+    const m = monsters[i];
+    const dx = (m.x + m.w/2) - (player.x + player.w/2);
+    const dy = (m.y + m.h/2) - (player.y + player.h/2);
+    const dist = Math.hypot(dx, dy);
+    if(dist <= player.attackRange + Math.max(m.w,m.h)/2 ){
+      m.hp -= player.attackDamage;
+      hitSfx.currentTime = 0; hitSfx.volume=0.9; hitSfx.play();
+      const nx = dx / (dist||1), ny = dy / (dist||1);
+      m.x += nx * 8; m.y += ny * 8;
+      if(m.hp <= 0){
+        monsters.splice(i,1);
+        monsterDieSfx.currentTime = 0; monsterDieSfx.volume = 0.9; monsterDieSfx.play();
+        score += 15;
+        document.getElementById('score').textContent = 'Pontuação: ' + score;
+      } else {
+        score += 4;
+        document.getElementById('score').textContent = 'Pontuação: ' + score;
       }
-      return true;
-    });
-    return !hit && b.y>-10;
-  });
-
-  requestAnimationFrame(update);
+    }
+  }
 }
 
-// controles teclado
-window.addEventListener('keydown',e=>{
-  if(e.key==='ArrowLeft'||e.key==='a') player.dx=-player.speed;
-  if(e.key==='ArrowRight'||e.key==='d') player.dx=player.speed;
-  if(e.key===' '){ bullets.push({x:player.x,y:player.y}); }
-});
-window.addEventListener('keyup',e=>{
-  if(e.key==='ArrowLeft'||e.key==='a'||e.key==='ArrowRight'||e.key==='d') player.dx=0;
-});
+/* ---------------- Monster AI ---------------- */
+function attemptMove(entity, vx, vy){
+  const orig = {x:entity.x, y:entity.y};
+  moveWithCollision(entity, vx, vy);
+  if(entity.x === orig.x && entity.y === orig.y){
+    moveWithCollision(entity, vx, 0);
+    if(entity.x === orig.x && entity.y === orig.y){
+      moveWithCollision(entity, 0, vy);
+      if(entity.x === orig.x && entity.y === orig.y){
+        if(entity.dirX != null) entity.dirX *= -1;
+        if(entity.dirY != null) entity.dirY *= -1;
+      }
+    }
+  }
+}
+function updateMonsters(){
+  monsters.forEach(m => {
+    const px = player.x + player.w/2, py = player.y + player.h/2;
+    const mx = m.x + m.w/2, my = m.y + m.h/2;
+    const dx = px - mx, dy = py - my;
+    const dist = Math.hypot(dx, dy);
+    if(dist < m.aggroRange){
+      const nx = dx / (dist||1), ny = dy / (dist||1);
+      const speed = m.speed + (dist < 60 ? 0.6 : 0);
+      attemptMove(m, nx * speed, ny * speed);
+      if(dist < 28){
+        player.hp -= 0.25;
+        const rx = -nx * 2, ry = -ny * 2;
+        player.x += rx; player.y += ry;
+      }
+    } else {
+      m.patrolTimer--;
+      if(m.patrolTimer <= 0){
+        m.patrolTimer = 60 + Math.floor(Math.random()*200);
+        m.dirX = Math.random()>0.5?1:-1;
+        m.dirY = Math.random()>0.7? (Math.random()>0.5?1:-1) : 0;
+      }
+      attemptMove(m, m.dirX * m.speed * 0.8, m.dirY * m.speed * 0.8);
+    }
+  });
+}
 
-// mobile
-const leftBtn=document.getElementById('leftBtn');
-const rightBtn=document.getElementById('rightBtn');
-const shootBtn=document.getElementById('shootBtn');
-leftBtn.ontouchstart=()=>player.dx=-player.speed;
-leftBtn.ontouchend=()=>player.dx=0;
-rightBtn.ontouchstart=()=>player.dx=player.speed;
-rightBtn.ontouchend=()=>player.dx=0;
-shootBtn.ontouchstart=()=>{bullets.push({x:player.x,y:player.y});};
+/* ---------------- Rendering ---------------- */
+function drawMap(){
+  for(let r=0;r<rows;r++){
+    for(let c=0;c<cols;c++){
+      const x = c*tileSize, y = r*tileSize;
+      ctx.fillStyle = ((c + r) % 2 === 0) ? '#0f5c2f' : '#116436';
+      ctx.fillRect(x, y, tileSize, tileSize);
+      if(map[r][c] === 1){
+        ctx.fillStyle = '#3b2b1f';
+        ctx.fillRect(x + tileSize*0.4, y + tileSize*0.55, tileSize*0.2, tileSize*0.35);
+        ctx.fillStyle = '#0f6b34';
+        ctx.beginPath();
+        ctx.ellipse(x + tileSize*0.5, y + tileSize*0.35, tileSize*0.45, tileSize*0.45, 0, 0, Math.PI*2);
+        ctx.fill();
+      }
+    }
+  }
+}
+function drawPlayer(){
+  // Placeholder: simple square with small face (no helmet)
+  const px = player.x, py = player.y;
+  // shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.fillRect(px, py + player.h - 4, player.w, 6);
+  // body (armored torso)
+  ctx.fillStyle = '#6b7cff';
+  ctx.fillRect(px, py, player.w, player.h);
+  // face area (no helmet)
+  ctx.fillStyle = '#ffd9b3';
+  ctx.fillRect(px + 6, py + 6, 12, 10);
+  // eyes
+  ctx.fillStyle = '#000';
+  ctx.fillRect(px + 9, py + 8, 3, 3);
+  ctx.fillRect(px + 14, py + 8, 3, 3);
+  // sword flash when attacking
+  if(player.attackCooldown > player.attackDelay - 8){
+    ctx.fillStyle = 'rgba(255,220,120,0.9)';
+    ctx.beginPath();
+    ctx.arc(px + player.w + 6, py + player.h/2 - 6, 8, 0, Math.PI*2);
+    ctx.fill();
+  }
+}
+function drawMonsters(){
+  monsters.forEach(m => {
+    ctx.fillStyle = 'rgba(0,0,0,0.18)';
+    ctx.fillRect(m.x, m.y + m.h - 4, m.w, 6);
+    ctx.fillStyle = '#b84b4b';
+    ctx.fillRect(m.x, m.y, m.w, m.h);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(m.x + 8, m.y + 8, 6, 6);
+    ctx.fillRect(m.x + m.w - 14, m.y + 8, 6, 6);
+    const hpBarW = Math.max(0, m.hp) / 120 * m.w;
+    ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(m.x, m.y - 8, m.w, 6);
+    ctx.fillStyle = '#5fdc6b'; ctx.fillRect(m.x, m.y - 8, hpBarW, 6);
+  });
+}
 
-// spawn
-setInterval(spawnStar,2000);
-setInterval(spawnAsteroid,1500);
+/* ---------------- Game Loop ---------------- */
+function gameLoop(){
+  ctx.clearRect(0,0,W,H);
+  drawMap();
 
-update();
+  // input -> velocity
+  let vx = 0, vy = 0;
+  if(Math.abs(joyVector.x) > 0.05 || Math.abs(joyVector.y) > 0.05){
+    vx = joyVector.x * player.speed * 2;
+    vy = joyVector.y * player.speed * 2;
+  } else {
+    if(keys['ArrowLeft'] || keys['a']) vx = -player.speed;
+    if(keys['ArrowRight'] || keys['d']) vx = player.speed;
+    if(keys['ArrowUp'] || keys['w']) vy = -player.speed;
+    if(keys['ArrowDown'] || keys['s']) vy = player.speed;
+  }
+  moveWithCollision(player, vx, vy);
+
+  if(player.attackCooldown > 0) player.attackCooldown--;
+
+  updateMonsters();
+
+  drawMonsters();
+  drawPlayer();
+
+  document.getElementById('hp').textContent = 'HP: ' + Math.max(0, Math.floor(player.hp));
+  if(player.hp <= 0){
+    ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle = '#fff'; ctx.font = '28px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('Você morreu — Pontuação: ' + score, W/2, H/2);
+    ctx.font = '16px sans-serif'; ctx.fillText('Recarregue a página para tentar novamente', W/2, H/2 + 36);
+    return;
+  }
+
+  requestAnimationFrame(gameLoop);
+}
+gameLoop();
+
 </script>
 </body>
 </html>
